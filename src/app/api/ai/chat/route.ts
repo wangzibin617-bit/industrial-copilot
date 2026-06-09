@@ -1,19 +1,45 @@
 // ============================================================
 // /api/ai/chat — Streaming AI chat endpoint (DeepSeek via AI SDK)
+// Auth: Cookie-based (browser) or Bearer token (API clients)
 // ============================================================
 
 import { streamText, convertToCoreMessages, type Message } from "ai";
 import { getModel } from "@/lib/ai/deepseek";
 import { SYSTEM_PROMPT } from "@/lib/ai/prompts";
 import { getCurrentUser } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // Allow streaming responses up to 60 seconds
 export const maxDuration = 60;
 
+async function authenticate(req: Request) {
+  // 1. Try cookie-based auth (browser flow)
+  const cookieUser = await getCurrentUser();
+  if (cookieUser) return cookieUser;
+
+  // 2. Try Bearer token auth (API/client flow)
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    try {
+      const supabaseAdmin = createAdminClient();
+      const {
+        data: { user },
+        error,
+      } = await supabaseAdmin.auth.getUser(token);
+      if (!error && user) return user;
+    } catch {
+      // Token invalid, fall through to 401
+    }
+  }
+
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
-    // Verify authentication
-    const user = await getCurrentUser();
+    // Verify authentication (cookie or Bearer token)
+    const user = await authenticate(req);
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }

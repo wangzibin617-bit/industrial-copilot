@@ -92,15 +92,31 @@ export async function POST(req: Request) {
     }
 
     // ── Get or create conversation ──
-    let convId = conversationId || null;
+    const supabaseAdmin = createAdminClient();
+    let convId: string | null = conversationId || null;
     const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+    const title =
+      lastUserMsg && typeof lastUserMsg.content === "string"
+        ? lastUserMsg.content.slice(0, 50) +
+          (lastUserMsg.content.length > 50 ? "..." : "")
+        : "新对话";
 
-    if (!convId && lastUserMsg) {
-      const title =
-        typeof lastUserMsg.content === "string"
-          ? lastUserMsg.content.slice(0, 50) +
-            (lastUserMsg.content.length > 50 ? "..." : "")
-          : "新对话";
+    // Ensure conversation row exists (create with client-provided ID if needed)
+    if (convId) {
+      const { data: existing } = await supabaseAdmin
+        .from("conversations")
+        .select("id")
+        .eq("id", convId)
+        .maybeSingle();
+
+      if (!existing) {
+        await supabaseAdmin.from("conversations").insert({
+          id: convId,
+          user_id: user.id,
+          title,
+        });
+      }
+    } else {
       convId = await createConversation(user.id, title);
     }
 

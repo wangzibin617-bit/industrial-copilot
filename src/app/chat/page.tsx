@@ -1,10 +1,12 @@
 // ============================================================
 // /chat — Core AI Chat page with streaming (useChat)
+// Server-side persistence: API route handles conversations + messages
 // ============================================================
 
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { flushSync } from "react-dom";
 import { useChat } from "ai/react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -38,7 +40,6 @@ export default function ChatPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  // State
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
@@ -47,7 +48,6 @@ export default function ChatPage() {
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
-  // Use AI SDK's useChat for streaming
   const {
     messages,
     input,
@@ -60,16 +60,13 @@ export default function ChatPage() {
     reload,
   } = useChat({
     api: "/api/ai/chat",
-    onFinish: async (message) => {
-      // Save the assistant message to Supabase
-      if (activeConversationId) {
-        await saveMessage(activeConversationId, "assistant", message.content);
-        await updateConversationTimestamp(activeConversationId);
-      }
+    body: { conversationId: activeConversationId },
+    onFinish: async () => {
+      await loadConversations();
     },
   });
 
-  // ----- Auth Check -----
+  // ── Auth Check ──
   useEffect(() => {
     async function checkAuth() {
       const {
@@ -84,14 +81,13 @@ export default function ChatPage() {
     checkAuth();
   }, [supabase, router]);
 
-  // ----- Load Conversations -----
+  // ── Load sidebar conversations ──
   useEffect(() => {
     loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadConversations() {
-    setLoadingConversations(true);
     try {
       const { data, error } = await supabase
         .from("conversations")
@@ -107,7 +103,7 @@ export default function ChatPage() {
     }
   }
 
-  // ----- Messages scroll -----
+  // ── Scroll to bottom ──
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (scrollRef.current) {
@@ -115,73 +111,7 @@ export default function ChatPage() {
     }
   }, [messages]);
 
-  // ----- Conversation CRUD -----
-  async function createConversation(title: string): Promise<string | null> {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return null;
-
-    const { data, error } = await supabase
-      .from("conversations")
-      .insert({
-        user_id: user.id,
-        title,
-        message_count: 0,
-      })
-      .select("id")
-      .single();
-
-    if (error) {
-      console.error("Failed to create conversation:", error);
-      return null;
-    }
-
-    await loadConversations();
-    return data.id;
-  }
-
-  async function saveMessage(
-    conversationId: string,
-    role: "user" | "assistant",
-    content: string
-  ) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { error } = await supabase.from("messages").insert({
-      conversation_id: conversationId,
-      user_id: user.id,
-      role,
-      content,
-    });
-
-    if (error) {
-      console.error("Failed to save message:", error);
-    }
-  }
-
-  async function updateConversationTimestamp(conversationId: string) {
-    await supabase
-      .from("conversations")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", conversationId);
-  }
-
-  async function deleteConversation(id: string) {
-    // Delete messages first, then conversation
-    await supabase.from("messages").delete().eq("conversation_id", id);
-    await supabase.from("conversations").delete().eq("id", id);
-
-    if (activeConversationId === id) {
-      setActiveConversationId(null);
-      setMessages([]);
-    }
-    await loadConversations();
-  }
-
+  // ── Load existing conversation ──
   async function loadConversationMessages(conversationId: string) {
     const { data, error } = await supabase
       .from("messages")
@@ -194,7 +124,6 @@ export default function ChatPage() {
       return;
     }
 
-    // Convert to AI SDK Message format
     const aiMessages = (data || []).map((m) => ({
       id: m.id,
       role: m.role as "user" | "assistant",
@@ -205,63 +134,49 @@ export default function ChatPage() {
     setActiveConversationId(conversationId);
   }
 
-  // ----- Handlers -----
-  const handleQuickStart = useCallback(
-    async (text: string) => {
-      // Create a new conversation
-      const title =
-        text.length > 50 ? text.slice(0, 50) + "..." : text;
-      const convId = await createConversation(title);
-      if (convId) {
-        setActiveConversationId(convId);
-        // Save user message
-        await saveMessage(convId, "user", text);
-        // Trigger AI
-        append({ role: "user", content: text });
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [append, createConversation, saveMessage]
-  );
+  // ── Delete conversation ──
+  async function deleteConversation(id: string) {
+    await supabase.from("messages").delete().eq("conversation_id", id);
+    await supabase.from("conversations").delete().eq("id", id);
 
+    if (activeConversationId === id) {
+      setActiveConversationId(null);
+      setMessages([]);
+    }
+    await loadConversations();
+  }
+
+  // ── Handlers ──
   const handleNewChat = () => {
     setActiveConversationId(null);
     setMessages([]);
   };
 
+  const handleQuickStart = useCallback(
+    (text: string) => {
+      const newId = crypto.randomUUID();
+      flushSync(() => {
+        setActiveConversationId(newId);
+      });
+      append({ role: "user", content: text });
+    },
+    [append]
+  );
+
   const onSubmit = useCallback(
-    async (e: React.FormEvent<HTMLFormElement>) => {
+    (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       if (!input.trim() || isLoading) return;
-
-      const userMessage = input.trim();
-
-      // Create conversation if needed
+      // Pre-generate conversation ID for new conversations
       if (!activeConversationId) {
-        const title =
-          userMessage.length > 50
-            ? userMessage.slice(0, 50) + "..."
-            : userMessage;
-        const convId = await createConversation(title);
-        if (convId) {
-          setActiveConversationId(convId);
-          await saveMessage(convId, "user", userMessage);
-        }
-      } else {
-        await saveMessage(activeConversationId, "user", userMessage);
+        const newId = crypto.randomUUID();
+        flushSync(() => {
+          setActiveConversationId(newId);
+        });
       }
-
-      // Trigger AI via useChat
       handleChatSubmit(e);
     },
-    [
-      input,
-      isLoading,
-      activeConversationId,
-      handleChatSubmit,
-      createConversation,
-      saveMessage,
-    ]
+    [input, isLoading, handleChatSubmit, activeConversationId]
   );
 
   async function handleLogout() {
@@ -270,7 +185,7 @@ export default function ChatPage() {
     router.refresh();
   }
 
-  // ----- Render -----
+  // ── Render ──
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
@@ -336,7 +251,6 @@ export default function ChatPage() {
           </div>
         </ScrollArea>
 
-        {/* Sidebar footer */}
         <div className="p-3 border-t">
           <div className="flex items-center gap-2 mb-2">
             <div className="p-1 bg-muted rounded-full">
@@ -368,9 +282,8 @@ export default function ChatPage() {
         </div>
       </aside>
 
-      {/* Main Chat Area */}
+      {/* Main Chat */}
       <main className="flex-1 flex flex-col min-w-0">
-        {/* Top bar */}
         <header className="h-12 border-b flex items-center px-4 shrink-0">
           <Button
             variant="ghost"
@@ -395,7 +308,6 @@ export default function ChatPage() {
           )}
         </header>
 
-        {/* Messages area */}
         <ScrollArea className="flex-1" ref={scrollRef}>
           <div className="max-w-3xl mx-auto">
             {messages.length === 0 ? (
@@ -406,7 +318,6 @@ export default function ChatPage() {
               ))
             )}
 
-            {/* Error state */}
             {error && (
               <div className="mx-4 my-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-400">
                 <strong>⚠️ 出错了：</strong>
@@ -423,7 +334,6 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Loading indicator for streaming */}
             {isLoading && messages.length > 0 && (
               <div className="flex items-center gap-2 px-4 py-3">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
@@ -437,7 +347,6 @@ export default function ChatPage() {
           </div>
         </ScrollArea>
 
-        {/* Input area */}
         <ChatInput
           input={input}
           handleInputChange={handleInputChange}

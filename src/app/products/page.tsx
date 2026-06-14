@@ -134,7 +134,18 @@ export default function ProductsPage() {
 
         const { data, error } = await query.limit(50);
         if (error) throw error;
-        setProducts(data || []);
+        // Supabase join returns nested objects as arrays; map to flat shape
+        const mapped: Product[] = ((data as any[]) || []).map((p: any) => ({
+          id: p.id,
+          series: p.series,
+          model: p.model,
+          name: p.name,
+          description: p.description,
+          source_note: p.source_note,
+          brand: Array.isArray(p.brand) ? p.brand[0] ?? null : (p.brand || null),
+          category: Array.isArray(p.category) ? p.category[0] ?? null : (p.category || null),
+        }));
+        setProducts(mapped);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "加载失败";
         setError(msg);

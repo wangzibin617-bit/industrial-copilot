@@ -13,6 +13,7 @@ import {
   Factory,
   MessageSquare,
   ArrowLeft,
+  Package,
   Trash2,
   Loader2,
   LogOut,
@@ -122,6 +123,14 @@ export default function HistoryPage() {
             <h1 className="font-semibold">对话记录</h1>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/products")}
+            >
+              <Package className="w-3 h-3 mr-1" />
+              产品库
+            </Button>
             <Button
               variant="ghost"
               size="sm"

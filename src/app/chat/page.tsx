@@ -19,6 +19,7 @@ import {
   Factory,
   Plus,
   History,
+  Package,
   LogOut,
   Loader2,
   Menu,
@@ -265,10 +266,19 @@ export default function ChatPage() {
               variant="ghost"
               size="sm"
               className="flex-1 justify-start gap-1 text-xs"
+              onClick={() => router.push("/products")}
+            >
+              <Package className="w-3 h-3" />
+              产品库
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 justify-start gap-1 text-xs"
               onClick={() => router.push("/history")}
             >
               <History className="w-3 h-3" />
-              全部记录
+              记录
             </Button>
             <Button
               variant="ghost"

@@ -6,7 +6,8 @@
 
 import { streamText, convertToCoreMessages, type Message } from "ai";
 import { getModel } from "@/lib/ai/deepseek";
-import { SYSTEM_PROMPT } from "@/lib/ai/prompts";
+import { SYSTEM_PROMPT, buildDataContext } from "@/lib/ai/prompts";
+import { retrieve } from "@/lib/ai/retrieve";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -126,14 +127,35 @@ export async function POST(req: Request) {
       await bumpConversation(convId);
     }
 
-    // ── Stream AI response with server-side persistence ──
+    // ── Retrieve matching products & knowledge from DB ──
+    let dataContext = "";
+    if (lastUserMsg && typeof lastUserMsg.content === "string") {
+      try {
+        const results = await retrieve(lastUserMsg.content);
+        dataContext = buildDataContext(results);
+      } catch (err) {
+        console.error("[API] Data retrieval failed:", err);
+        // Continue without data context on retrieval error
+      }
+    }
+
+    // ── Stream AI response with data context ──
     const coreMessages = convertToCoreMessages(messages);
+
+    // Prepend data context as a system message if available
+    const systemMessages: any[] = [];
+    if (dataContext) {
+      systemMessages.push({
+        role: "system",
+        content: `以下是当前系统中匹配到的产品数据和销售知识，请优先基于这些数据回答。如果没有完全匹配的数据，请诚实告知用户。\n\n${dataContext}`,
+      });
+    }
     let assistantText = "";
 
     const result = streamText({
       model: getModel("deepseek-chat"),
       system: SYSTEM_PROMPT,
-      messages: coreMessages,
+      messages: [...systemMessages, ...coreMessages],
       temperature: 0.5,
       maxTokens: 4096,
       onFinish: async ({ text }) => {

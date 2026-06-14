@@ -47,7 +47,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // If not logged in and on protected pages, redirect to /login
-  if (!user && (pathname === "/chat" || pathname === "/history" || pathname === "/products")) {
+  if (!user && (pathname === "/chat" || pathname === "/history" || pathname === "/products" || pathname.startsWith("/solutions"))) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
@@ -65,5 +65,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/chat", "/history", "/products"],
+  matcher: ["/", "/login", "/chat", "/history", "/products", "/solutions", "/solutions/:path*"],
 };

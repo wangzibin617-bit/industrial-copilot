@@ -20,6 +20,7 @@ import {
   Plus,
   History,
   Package,
+  FileText,
   LogOut,
   Loader2,
   Menu,
@@ -270,6 +271,15 @@ export default function ChatPage() {
             >
               <Package className="w-3 h-3" />
               产品库
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 justify-start gap-1 text-xs"
+              onClick={() => router.push("/solutions")}
+            >
+              <FileText className="w-3 h-3" />
+              方案
             </Button>
             <Button
               variant="ghost"

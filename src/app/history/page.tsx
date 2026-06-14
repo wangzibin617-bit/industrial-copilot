@@ -14,6 +14,7 @@ import {
   MessageSquare,
   ArrowLeft,
   Package,
+  FileText,
   Trash2,
   Loader2,
   LogOut,
@@ -130,6 +131,14 @@ export default function HistoryPage() {
             >
               <Package className="w-3 h-3 mr-1" />
               产品库
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/solutions")}
+            >
+              <FileText className="w-3 h-3 mr-1" />
+              方案
             </Button>
             <Button
               variant="ghost"

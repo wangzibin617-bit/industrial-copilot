@@ -12,7 +12,8 @@
 
 🔗 **Live Demo**: *（待部署）*
 
-![screenshot-chat](docs/screenshots/chat.png) *（截图占位 — 待补充）*
+<img width="2030" height="1326" alt="image" src="https://github.com/user-attachments/assets/68ca7405-beb2-4f46-8535-8833947a7dd2" />
+
 
 ---
 
